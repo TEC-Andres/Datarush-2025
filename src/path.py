@@ -1,0 +1,24 @@
+import os 
+from dotenv import load_dotenv
+load_dotenv()
+
+# Environment Variables Paths
+DATARUSH_PATH = os.getenv("DATARUSH_PATH")
+DB_AVIATION = os.getenv("DB_AVIATION")
+
+# Paths from DataRush organizers
+countries = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", DATARUSH_PATH, "countries.csv")
+global_holidays = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", DATARUSH_PATH, "global_holidays.csv")
+monthly_sales = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", DATARUSH_PATH, "monthly_sales.csv") # Not used
+
+# Paths for aviation 
+aviation_2010 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", DB_AVIATION, "2010.xlsx")
+aviation_2011 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", DB_AVIATION, "2011.xlsx")
+aviation_2012 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", DB_AVIATION, "2012.xlsx")
+aviation_2013 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", DB_AVIATION, "2013.xlsx")
+aviation_2014 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", DB_AVIATION, "2014.xlsx")
+aviation_2015 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", DB_AVIATION, "2015.xlsx")
+aviation_2016 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", DB_AVIATION, "2016.xlsx")
+aviation_2017 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", DB_AVIATION, "2017.xlsx")
+aviation_2018 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", DB_AVIATION, "2018.xlsx")
+aviation_2019 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", DB_AVIATION, "2019.xlsx")
