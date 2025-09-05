@@ -9,5 +9,3 @@
 #       Created:                09/05/2025
 #       Last Modified:          09/05/2025
 '''
-
-print("Hello World")
