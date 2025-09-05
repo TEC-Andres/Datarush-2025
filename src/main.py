@@ -1,6 +1,6 @@
 '''
 #       Sesion 4: For and while loops
-#       Andrés Rodríguez Cantú & Ethiel Favila Alvarado  ─ A01287002
+#       Andrés Rodríguez Cantú & Ethiel Favila Alvarado
 #
 #       Copyright (C) Tecnológico de Monterrey
 #
