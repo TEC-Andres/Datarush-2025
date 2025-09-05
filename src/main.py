@@ -9,5 +9,11 @@
 #       Created:                09/05/2025
 #       Last Modified:          09/05/2025
 '''
+class Solution():
+    def __init__(self):
+        pass
 
-print("Test")
+
+if __name__ == "__main__":
+    solution = Solution()
+    
