@@ -9,13 +9,10 @@
 #       Created:                09/05/2025
 #       Last Modified:          09/05/2025
 '''
+import sys
 import os 
 from dotenv import load_dotenv
 load_dotenv()
-
-# Set default environment variables if not set
-os.environ.setdefault("DATARUSH_PATH", "DataRush-RecomendacionesEstrategicas/recursos/datos")
-os.environ.setdefault("DB_AVIATION", "db/aviation_bureau")
 
 # Environment Variables Paths
 DATARUSH_PATH = os.getenv("DATARUSH_PATH")
