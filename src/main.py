@@ -1,5 +1,5 @@
 '''
-#       Sesion 4: For and while loops
+#    
 #       Andrés Rodríguez Cantú & Ethiel Favila Alvarado
 #
 #       Copyright (C) Tecnológico de Monterrey
@@ -9,10 +9,12 @@
 #       Created:                09/05/2025
 #       Last Modified:          09/05/2025
 '''
+import os
 from path import *
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-class Main():
+class LoadData():
     def __init__(self):
         pass
 
@@ -20,21 +22,31 @@ class Main():
         # Load countries data
         self.countries_df = pd.read_csv(countries)
         print("Countries Data Loaded:")
-        print(self.countries_df.head())
 
         # Load global holidays data
         self.holidays_df = pd.read_csv(global_holidays)
-        print("\nGlobal Holidays Data Loaded:")
-        print(self.holidays_df.head())
+        print("Global Holidays Data Loaded:")
 
-        # Load aviation data for each year
+        # Load aviation data for each year in parallel
+        aviation_paths = {}
         for i in range(2010, 2020):
             raw_path = globals()[f'aviation_{i}']
             sanitized_path = raw_path.replace('src\\..\\', '')
-            aviation_data = pd.read_excel(sanitized_path)
-            print(f"\nAviation Data for {i} Loaded:")
-            print(aviation_data.head())
+            aviation_paths[i] = sanitized_path
+
+        def load_excel(year, path):
+            df = pd.read_excel(path)
+            print(f"Aviation Data {year} Loaded: shape={df.shape}")
+            return year, df
+
+        self.aviation_data = {}
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(load_excel, year, path) for year, path in aviation_paths.items()]
+            for future in as_completed(futures):
+                year, df = future.result()
+                self.aviation_data[year] = df
         
+
 if __name__ == "__main__":
-    main = Main()
-    main.load_data()
+    loader = LoadData()
+    loader.load_data()
