@@ -265,7 +265,10 @@ class FilterData():
     def print_aviation_head(self, aviation_data, year):
         df_year = aviation_data.get(f'aviation_{year}')
         if df_year is not None:
-            return df_year["Destination"]
+            columns = ["Airport", "Destination"]
+            if "Month" in df_year.columns:
+                columns.append("Month")
+            return df_year[columns]
         else:
             print(f"Aviation {year} data not loaded.")
 
@@ -283,22 +286,63 @@ if __name__ == "__main__":
     try:
         muslim_countries = filter.countriesMuslims(loader.population_census_df)
         print(muslim_countries)
-        aviation_codes = filter.print_aviation_head(loader.aviation_data, 2019)
+        aviation_codes = filter.print_aviation_head(loader.aviation_data, 2010)
 
         # Transform the rank 2 array into a rank 1 array
         if aviation_codes is not None:
-            country_codes = aviation_codes.apply(
-                lambda airport: airport_data.get_airport_by_iata(airport)[0]["country_code"]
-                if isinstance(airport, str) and len(airport) == 3 and airport.isalpha() and airport_data.get_airport_by_iata(airport)
-                else None
-            )
-            country_codes = country_codes.dropna()
-            print(country_codes.values)
-            print(len(country_codes.values))
-        
+            results = []
+            for idx, row in aviation_codes.iterrows():
+                airport = row["Airport"]
+                destination = row["Destination"]
+                airport_code = None
+                dest_code = None
+                month = row["Month"] if "Month" in row else None
+                # Get country codes for airport and destination
+                if isinstance(airport, str) and len(airport) == 3 and airport.isalpha():
+                    airport_info = airport_data.get_airport_by_iata(airport)
+                    if airport_info:
+                        airport_code = airport_info[0].get("country_code")
+                if isinstance(destination, str) and len(destination) == 3 and destination.isalpha():
+                    dest_info = airport_data.get_airport_by_iata(destination)
+                    if dest_info:
+                        dest_code = dest_info[0].get("country_code")
+                # Only keep if both codes are not None
+                if airport_code is not None and dest_code is not None:
+                    results.append({
+                        "Airport": airport,
+                        "Destination": destination,
+                        "Codes": [airport_code, dest_code],
+                        "Month": month
+                    })
+            # Print as a list of [Airport, Destination, Month] tuples
+            filtered_list = [
+                [
+                    airport_data.get_airport_by_iata(entry['Airport'])[0]["country_code"],
+                    airport_data.get_airport_by_iata(entry['Destination'])[0]["country_code"],
+                    entry["Month"]
+                ]
+                for entry in results
+            ]
+            print("Filtered list:")
+            print(filtered_list)
+            print(f"Length after filtering: {len(filtered_list)}")
 
-    
+            # Also return as a DataFrame
+            filtered_df = pd.DataFrame([
+                {
+                    "AirportCode": airport_data.get_airport_by_iata(entry['Airport'])[0]["country_code"],
+                    "DestinationCode": airport_data.get_airport_by_iata(entry['Destination'])[0]["country_code"],
+                    "Month": entry["Month"]
+                }
+                for entry in results
+            ])
+            print("Filtered DataFrame:")
+            print(filtered_df)
+
+            # Save DataFrame to a separate file
+            output_path = "_filtered_aviation_output.csv"
+            filtered_df.to_csv(output_path, index=False)
+            print(f"Filtered DataFrame saved to {output_path}")
 
     except Exception as e:
         print(aviation_codes)
-    
