@@ -15,15 +15,21 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 
 class LoadData():
-
     def __init__(self):
         self.countries_df = None
         self.holidays_df = None
         self.aviation_data = {}
         self.pilgrimage_data = {}
+        self.population_census_df = None
 
     def _load_csv(self, path, name=None):
         df = pd.read_csv(path)
+        if name:
+            print(f"{name} Data Loaded: shape={df.shape}")
+        return df
+    
+    def _load_excel(self, path, name=None):
+        df = pd.read_excel(path)
         if name:
             print(f"{name} Data Loaded: shape={df.shape}")
         return df
@@ -41,10 +47,11 @@ class LoadData():
                 results[key] = df
         return results
 
-
+        
     def load_data(self):
         self.countries_df = self._load_csv(countries, name="Countries")
         self.holidays_df = self._load_csv(global_holidays, name="Global Holidays")
+        self.population_census_df = self._load_excel("db/muslims/population_census/muslim_population_by_country.xlsx", name="Population Census") # No clue how to load this path from env vars. It just loads bad for no apparent reason
 
         aviation_paths = {i: os.path.normpath(globals()[f'aviation_{i}']) for i in range(2010, 2020)}
         pilgrimage = {

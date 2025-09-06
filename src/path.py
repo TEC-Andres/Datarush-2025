@@ -18,6 +18,7 @@ load_dotenv()
 DATARUSH_PATH = os.getenv("DATARUSH_PATH")
 DB_AVIATION = os.getenv("DB_AVIATION")
 DB_HAJJ = os.getenv("DB_HAJJ")
+DB_POPULATION = os.getenv("DB_POPULATION")
 
 # Paths from DataRush organizers
 countries = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", DATARUSH_PATH, "countries.csv")
@@ -43,3 +44,6 @@ pilgrimage_2016 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
 # 2017-2018 combined data
 pilgrimage_2018 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", DB_HAJJ, "pilgrimage3.xlsx")
 pilgrimage_2019 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", DB_HAJJ, "pilgrimage4.xlsx")
+
+# Paths for Muslim Population Census
+population_census = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", DB_POPULATION, "population_census.xlsx")
