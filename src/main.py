@@ -64,7 +64,19 @@ class LoadData():
         self.aviation_data = self._load_excels_parallel(aviation_paths, print_prefix="Aviation Data")
         self.pilgrimage_data = self._load_excels_parallel(pilgrimage, print_prefix="Pilgrimage Data")
 
+class FilterData():
+    def __init__(self):
+        pass
 
+    def grabTop15MuslimCountriesPC(self, population_census_df):
+        # Assumes 'population_census_df' has a column 'MuslimPopulation_PctOfPopWhoAreMuslim_pct_2024update' and 'Country'
+        top15 = population_census_df.sort_values(by='MuslimPopulation_PctOfPopWhoAreMuslim_pct_2024update', ascending=False).head(15)
+        return top15
+    
 if __name__ == "__main__":
     loader = LoadData()
     loader.load_data()
+    filterer = FilterData()
+    top15_muslim_countries = filterer.grabTop15MuslimCountriesPC(loader.population_census_df)
+    print("Top 15 Muslim Countries by Population Percentage:")
+    print(top15_muslim_countries[['flagCode', 'MuslimPopulation_PctOfPopWhoAreMuslim_pct_2024update']])
