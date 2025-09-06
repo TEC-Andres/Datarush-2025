@@ -540,6 +540,75 @@ class GraphData():
         ax.text(1.05, 1.02, "Grid: Destinations x Months. Slider: Year. Red dashed line = Hajj month.", transform=ax.transAxes, fontsize=9, va='bottom', wrap=True)
 
         plt.show()
+        # --- Export interactive Plotly HTML with year slider ---
+        try:
+            import plotly.graph_objects as go
+            import pandas as pd
+            months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+            frames = []
+            for year in range(start_year, end_year + 1):
+                z = year_counts[year].values
+                hajj_month = hajj_months.get(year, None)
+                shapes = []
+                if hajj_month:
+                    shapes.append(dict(
+                        type="line",
+                        x0=months[hajj_month-1], x1=months[hajj_month-1],
+                        y0=all_dest_codes[0], y1=all_dest_codes[-1],
+                        line=dict(color="red", width=3, dash="dash"),
+                        xref="x", yref="y"
+                    ))
+                frames.append(go.Frame(
+                    data=[go.Heatmap(
+                        z=z,
+                        x=months,
+                        y=all_dest_codes,
+                        colorscale=cmap,
+                        colorbar=dict(title='Occurrences')
+                    )],
+                    name=str(year),
+                    layout=go.Layout(
+                        title_text=f"Destination Code Frequency - {year}",
+                        shapes=shapes
+                    )
+                ))
+            # Initial data
+            z_init = year_counts[initial_year].values
+            hajj_month_init = hajj_months.get(initial_year, None)
+            shapes_init = []
+            if hajj_month_init:
+                shapes_init.append(dict(
+                    type="line",
+                    x0=months[hajj_month_init-1], x1=months[hajj_month_init-1],
+                    y0=all_dest_codes[0], y1=all_dest_codes[-1],
+                    line=dict(color="red", width=3, dash="dash"),
+                    xref="x", yref="y"
+                ))
+            heatmap = go.Heatmap(
+                z=z_init,
+                x=months,
+                y=all_dest_codes,
+                colorscale=cmap,
+                colorbar=dict(title='Occurrences')
+            )
+            layout = go.Layout(
+                title=f"Destination Code Frequency - {initial_year}",
+                shapes=shapes_init,
+                sliders=[dict(
+                    steps=[dict(method="animate", args=[[str(year)],
+                        dict(mode="immediate", frame=dict(duration=500, redraw=True), transition=dict(duration=0))],
+                        label=str(year)) for year in range(start_year, end_year + 1)],
+                    active=0,
+                    x=0.1,
+                    y=0,
+                    len=0.8
+                )]
+            )
+            fig_plotly = go.Figure(data=[heatmap], layout=layout, frames=frames)
+            fig_plotly.write_html("plot_year_destination_heatmap.html", include_plotlyjs="cdn")
+            print("Interactive Plotly HTML with year slider and Hajj month line exported: plot_year_destination_heatmap.html")
+        except Exception as e:
+            print(f"Plotly export failed: {e}")
         return fig, year_slider
 
 
