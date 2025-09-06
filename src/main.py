@@ -265,7 +265,7 @@ class FilterData():
     def print_aviation_head(self, aviation_data, year):
         df_year = aviation_data.get(f'aviation_{year}')
         if df_year is not None:
-            columns = ["Airport", "Destination"]
+            columns = ["Destination", "Airport"]
             if "Month" in df_year.columns:
                 columns.append("Month")
             return df_year[columns]
@@ -317,8 +317,8 @@ if __name__ == "__main__":
             # Print as a list of [Airport, Destination, Month] tuples
             filtered_list = [
                 [
-                    airport_data.get_airport_by_iata(entry['Airport'])[0]["country_code"],
                     airport_data.get_airport_by_iata(entry['Destination'])[0]["country_code"],
+                    airport_data.get_airport_by_iata(entry['Airport'])[0]["country_code"],
                     entry["Month"]
                 ]
                 for entry in results
@@ -330,8 +330,8 @@ if __name__ == "__main__":
             # Also return as a DataFrame
             filtered_df = pd.DataFrame([
                 {
-                    "AirportCode": airport_data.get_airport_by_iata(entry['Airport'])[0]["country_code"],
                     "DestinationCode": airport_data.get_airport_by_iata(entry['Destination'])[0]["country_code"],
+                    "AirportCode": airport_data.get_airport_by_iata(entry['Airport'])[0]["country_code"],
                     "Month": entry["Month"]
                 }
                 for entry in results
