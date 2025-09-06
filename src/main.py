@@ -24,6 +24,8 @@ from datetime import timedelta
 from airports import airport_data
 import matplotlib.pyplot as plt
 import seaborn as sns
+from matplotlib.widgets import Slider
+from matplotlib import colors as mcolors
 
 # -----------------------
 # Configuration
@@ -272,77 +274,282 @@ class FilterData():
         else:
             print(f"Aviation {year} data not loaded.")
 
+    # -----------------------
+    # Aviation processing helpers (refactored)
+    # -----------------------
+    def _extract_codes(self, airport: str, destination: str):
+        """Return (airport_country_code, destination_country_code) or (None, None)."""
+        airport_code = None
+        dest_code = None
+        if isinstance(airport, str) and len(airport) == 3 and airport.isalpha():
+            info = airport_data.get_airport_by_iata(airport)
+            if info:
+                airport_code = info[0].get("country_code")
+        if isinstance(destination, str) and len(destination) == 3 and destination.isalpha():
+            info = airport_data.get_airport_by_iata(destination)
+            if info:
+                dest_code = info[0].get("country_code")
+        return airport_code, dest_code
+
+    def _row_to_result(self, row):
+        """Convert a DataFrame row to a normalized result dict or None if codes missing."""
+        airport = row.get("Airport")
+        destination = row.get("Destination")
+        month = row.get("Month") if "Month" in row else None
+        airport_code, dest_code = self._extract_codes(airport, destination)
+        if airport_code is None or dest_code is None:
+            return None
+        return {
+            "Airport": airport,
+            "Destination": destination,
+            "AirportCode": airport_code,
+            "DestinationCode": dest_code,
+            "Month": month
+        }
+
+    def process_aviation_df(self, df):
+        """Process a given aviation DataFrame (subset) into a list of result dicts."""
+        results = []
+        for _, row in df.iterrows():
+            r = self._row_to_result(row)
+            if r:
+                results.append(r)
+        return results
+
+    def build_filtered_list(self, results):
+        """Return list of [DestinationCode, AirportCode, Month] from result dicts."""
+        return [
+            [r["DestinationCode"], r["AirportCode"], r.get("Month")] for r in results
+        ]
+
+    def results_to_dataframe(self, results):
+        """Convert result dicts to DataFrame with consistent columns."""
+        if not results:
+            return pd.DataFrame(columns=["DestinationCode", "AirportCode", "Month"])
+        return pd.DataFrame(results)[["DestinationCode", "AirportCode", "Month"]]
+
+    def process_year(self, aviation_data: dict, year: int, head: int = None):
+        """Process a single year; returns (filtered_list, filtered_df) or (None, None) if missing. If head is None, process all rows."""
+        df_year = aviation_data.get(f"aviation_{year}")
+        if df_year is None:
+            print(f"[WARN] aviation_{year} not found; skipping.")
+            return None, None
+        cols = [c for c in ["Airport", "Destination", "Month"] if c in df_year.columns]
+        subset = df_year[cols] if head is None else df_year[cols].head(head)
+        results = self.process_aviation_df(subset)
+        filtered_list = self.build_filtered_list(results)
+        filtered_df = self.results_to_dataframe(results)
+        print(f"Year {year}: processed {len(filtered_list)} records")
+        return filtered_list, filtered_df
+
+    def process_years(self, aviation_data: dict, years, output_dir: str = "_aviation_outputs", head: int = None):
+        """Iterate over multiple years, saving one CSV per year; returns dict year->DataFrame. If head is None, process all rows."""
+        os.makedirs(output_dir, exist_ok=True)
+        year_map = {}
+        for year in years:
+            flist, fdf = self.process_year(aviation_data, year, head=head)
+            if fdf is None:
+                continue
+            out_path = os.path.join(output_dir, f"filtered_aviation_{year}.csv")
+            fdf.to_csv(out_path, index=False)
+            print(f"Saved {out_path}")
+            year_map[year] = fdf
+        return year_map
+
+class GraphData():
+    def __init__(self):
+        pass
+
+    def _load_filtered_year(self, year: int, directory: str = "_aviation_outputs"):
+        """Load a previously filtered aviation CSV for the given year.
+
+        Expects a file named filtered_aviation_{year}.csv with at least the columns:
+          - DestinationCode
+          - Month (numeric 1-12 or strings convertible to 1-12)
+
+        Returns a DataFrame or raises FileNotFoundError / ValueError on issues.
+        """
+        path = os.path.join(directory, f"filtered_aviation_{year}.csv")
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Filtered aviation file not found: {path}")
+        df = pd.read_csv(path)
+        required_cols = {"DestinationCode", "Month"}
+        missing = required_cols - set(df.columns)
+        if missing:
+            raise ValueError(f"Missing required columns in {path}: {missing}")
+        # Coerce Month to integers 1..12 where possible
+        df["Month"] = df["Month"].apply(self._coerce_month)
+        df = df.dropna(subset=["Month"])  # drop rows where month couldn't be interpreted
+        df["Month"] = df["Month"].astype(int)
+        return df
+
+    def _coerce_month(self, m):
+        if pd.isna(m):
+            return None
+        # Already numeric
+        if isinstance(m, (int, float)):
+            if 1 <= int(m) <= 12:
+                return int(m)
+            return None
+        # Try common month name / abbreviation
+        if isinstance(m, str):
+            ms = m.strip().lower()
+            month_map = {
+                'jan': 1, 'january': 1,
+                'feb': 2, 'february': 2,
+                'mar': 3, 'march': 3,
+                'apr': 4, 'april': 4,
+                'may': 5,
+                'jun': 6, 'june': 6,
+                'jul': 7, 'july': 7,
+                'aug': 8, 'august': 8,
+                'sep': 9, 'sept': 9, 'september': 9,
+                'oct': 10, 'october': 10,
+                'nov': 11, 'november': 11,
+                'dec': 12, 'december': 12,
+            }
+            if ms.isdigit():
+                mv = int(ms)
+                return mv if 1 <= mv <= 12 else None
+            return month_map.get(ms)
+        return None
+
+    def plot_month_destination_heatmap(self, year: int, directory: str = "_aviation_outputs", 
+                                       normalize_by: str = "year_total", cmap: str = "viridis",
+                                       figsize=(10, 6), flag_codes=None, log_scale=False):
+        """Interactive heat map (month slider) of destination code frequencies.
+
+        Parameters
+        ----------
+        year : int
+            Year of the pre-filtered aviation CSV.
+        directory : str
+            Directory containing filtered_aviation_{year}.csv.
+        normalize_by : {'year_total','month'}
+            - 'year_total': color scale fixed using each destination's TOTAL appearances across all months
+              (so color intensity remains comparable month-to-month using the yearly max across destinations).
+            - 'month': color scale adapts to the selected month (max within that month's counts).
+        cmap : str
+            Matplotlib colormap name.
+        figsize : tuple
+            Figure size.
+        flag_codes : list[str] or None
+            If provided, only show destinations whose code is in this list.
+
+        Behavior
+        --------
+        The visualization shows a single-column heat map (DestinationCodes on Y axis, one column representing
+        the currently selected month). A slider (1..12) updates the column to show that month's counts.
+        Color normalization stays constant across months if normalize_by='year_total'.
+        """
+        df = self._load_filtered_year(year, directory)
+        if df.empty:
+            raise ValueError("Filtered DataFrame is empty; cannot build heat map.")
+
+        # Filter by flag_codes if provided
+        if flag_codes is not None:
+            normalized = [c.strip().upper() for c in flag_codes if isinstance(c, str) and c.strip()]
+            df = df[df['DestinationCode'].str.upper().isin(normalized)]
+            if df.empty:
+                raise ValueError("No destinations match the provided flag codes.")
+
+        # Aggregate counts per destination per month
+        counts = (df.groupby(["DestinationCode", "Month"]).size()
+                    .unstack(fill_value=0))
+
+        # Ensure all months 1..12 are present as columns
+        for m in range(1, 13):
+            if m not in counts.columns:
+                counts[m] = 0
+        counts = counts[sorted(counts.columns)]
+
+        dest_codes = counts.index.tolist()
+        # Precompute total counts (used for normalization or reference)
+        yearly_totals = counts.sum(axis=1)
+        global_max_year = yearly_totals.max()
+        # Fallback if somehow all zero
+        if global_max_year == 0:
+            global_max_year = 1
+
+        # Initial month to display (first with any data or 1)
+        initial_month = next((m for m in range(1, 13) if counts[m].sum() > 0), 1)
+
+        # Logarithmic transformation if requested
+        def log_transform(arr):
+            return np.log1p(arr)  # log(1 + x) to avoid log(0)
+
+        # Prepare figure
+        fig, ax = plt.subplots(figsize=figsize)
+        plt.subplots_adjust(left=0.25, bottom=0.25)  # leave space for slider & y labels
+
+        month_vector = counts[initial_month].values[:, None]  # shape (n_destinations, 1)
+        if log_scale:
+            month_vector = log_transform(month_vector)
+
+        if log_scale:
+            norm = mcolors.Normalize(vmin=0)
+        else:
+            norm = mcolors.Normalize(vmin=0)
+
+        img = ax.imshow(month_vector, aspect='auto', cmap=cmap, norm=norm)
+        ax.set_title(f"Destination Code Frequency - {year} (Month {initial_month})")
+        ax.set_xlabel("Selected Month")
+        ax.set_xticks([0])
+        ax.set_xticklabels([initial_month])
+        ax.set_yticks(range(len(dest_codes)))
+        ax.set_yticklabels(dest_codes)
+
+        cbar = fig.colorbar(img, ax=ax, orientation='vertical', shrink=0.8)
+        cbar.set_label('Log Occurrences' if log_scale else 'Occurrences')
+
+        # Slider for month selection
+        slider_ax = fig.add_axes([0.25, 0.1, 0.5, 0.03])  # [left, bottom, width, height]
+        month_slider = Slider(ax=slider_ax, label='Month', valmin=1, valmax=12, valinit=initial_month, valstep=1)
+
+        def update(val):
+            m = int(month_slider.val)
+            new_vec = counts[m].values[:, None]
+            if log_scale:
+                new_vec = log_transform(new_vec)
+            img.set_data(new_vec)
+            ax.set_title(f"Destination Code Frequency - {year} (Month {m})")
+            ax.set_xticklabels([m])
+            if normalize_by == 'month':
+                vmax_local = max(1, new_vec.max())
+                img.set_norm(mcolors.Normalize(vmin=0, vmax=vmax_local))
+                cbar.update_normal(img)
+            # If 'year_total', norm fixed; no change needed
+            fig.canvas.draw_idle()
+
+        month_slider.on_changed(update)
+
+        # Helpful annotation: show how color is determined
+        norm_desc = (
+            ("Log color scale fixed by yearly totals (max occurrences across all months)." if log_scale else "Color scale fixed by yearly totals (max occurrences across all months).")
+            if normalize_by == 'year_total' else
+            ("Log color scale adjusts to selected month (local monthly max)." if log_scale else "Color scale adjusts to selected month (local monthly max).")
+        )
+        ax.text(1.05, 1.02, norm_desc, transform=ax.transAxes, fontsize=9, va='bottom', wrap=True)
+
+        plt.show()
+        return fig, month_slider
+
+
 # -----------------------
 # Usage example (main)
 # -----------------------
 if __name__ == "__main__":
-    # Class implementation
     cache_mgr = CacheManager()
     loader = LoadData(cache_manager=cache_mgr)
     loader.load_data()
-    filter = FilterData()
-
-    # Executable code
+    f = FilterData()
     try:
-        muslim_countries = filter.countriesMuslims(loader.population_census_df)
+        muslim_countries = f.countriesMuslims(loader.population_census_df)
         print(muslim_countries)
-        aviation_codes = filter.print_aviation_head(loader.aviation_data, 2010)
-
-        # Transform the rank 2 array into a rank 1 array
-        if aviation_codes is not None:
-            results = []
-            for idx, row in aviation_codes.iterrows():
-                airport = row["Airport"]
-                destination = row["Destination"]
-                airport_code = None
-                dest_code = None
-                month = row["Month"] if "Month" in row else None
-                # Get country codes for airport and destination
-                if isinstance(airport, str) and len(airport) == 3 and airport.isalpha():
-                    airport_info = airport_data.get_airport_by_iata(airport)
-                    if airport_info:
-                        airport_code = airport_info[0].get("country_code")
-                if isinstance(destination, str) and len(destination) == 3 and destination.isalpha():
-                    dest_info = airport_data.get_airport_by_iata(destination)
-                    if dest_info:
-                        dest_code = dest_info[0].get("country_code")
-                # Only keep if both codes are not None
-                if airport_code is not None and dest_code is not None:
-                    results.append({
-                        "Airport": airport,
-                        "Destination": destination,
-                        "Codes": [airport_code, dest_code],
-                        "Month": month
-                    })
-            # Print as a list of [Airport, Destination, Month] tuples
-            filtered_list = [
-                [
-                    airport_data.get_airport_by_iata(entry['Destination'])[0]["country_code"],
-                    airport_data.get_airport_by_iata(entry['Airport'])[0]["country_code"],
-                    entry["Month"]
-                ]
-                for entry in results
-            ]
-            print("Filtered list:")
-            print(filtered_list)
-            print(f"Length after filtering: {len(filtered_list)}")
-
-            # Also return as a DataFrame
-            filtered_df = pd.DataFrame([
-                {
-                    "DestinationCode": airport_data.get_airport_by_iata(entry['Destination'])[0]["country_code"],
-                    "AirportCode": airport_data.get_airport_by_iata(entry['Airport'])[0]["country_code"],
-                    "Month": entry["Month"]
-                }
-                for entry in results
-            ])
-            print("Filtered DataFrame:")
-            print(filtered_df)
-
-            # Save DataFrame to a separate file
-            output_path = "_filtered_aviation_output.csv"
-            filtered_df.to_csv(output_path, index=False)
-            print(f"Filtered DataFrame saved to {output_path}")
-
-    except Exception as e:
-        print(aviation_codes)
+        # Process multiple years; if head is None, process all rows
+        #f.process_years(loader.aviation_data, years=range(2010, 2020))
+        plotter = GraphData()
+        flag_codes = ['EG', 'TR', 'IR', 'PK', 'ID', 'BD', 'IN', 'MY', 'NG', 'DZ', 'MA', 'IQ', 'AF', 'YE', 'SY']
+        plotter.plot_month_destination_heatmap(year=2010, normalize_by='year_total', cmap='plasma', flag_codes=flag_codes)
+    except Exception as exc:
+        print(f"Error during aviation processing: {exc}")
