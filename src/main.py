@@ -10,6 +10,7 @@
 #       Last Modified:          09/05/2025
 '''
 from path import *
+from dates import *
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
@@ -18,6 +19,11 @@ import json
 import pickle
 from pathlib import Path
 import time
+from hijridate import Hijri
+from datetime import timedelta
+from airports import airport_data
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # -----------------------
 # Configuration
@@ -250,55 +256,49 @@ class FilterData():
         # Assumes 'population_census_df' has a column 'MuslimPopulation_PctOfPopWhoAreMuslim_pct_2024update' and 'Country'
         if population_census_df is None:
             raise ValueError("population_census_df is None. Did you load data correctly?")
-        top15_muslim_countries = population_census_df.sort_values(
+        top16_muslim_countries = population_census_df.sort_values(
             by='MuslimPopulation_PctOfPopWhoAreMuslim_pct_2024update', ascending=False
-        ).head(15)
-        print("Top15 Muslim Countries by Population Percentage:")
-        print(top15_muslim_countries[['flagCode', 'MuslimPopulation_PctOfPopWhoAreMuslim_pct_2024update']])
+        ).head(16)
+        print("Top16 Muslim Countries by Population Percentage:")
+        return top16_muslim_countries[['flagCode']]
+    
+    def print_aviation_head(self, aviation_data, year):
+        df_year = aviation_data.get(f'aviation_{year}')
+        if df_year is not None:
+            return df_year["Destination"]
+        else:
+            print(f"Aviation {year} data not loaded.")
 
 # -----------------------
 # Usage example (main)
 # -----------------------
 if __name__ == "__main__":
+    # Class implementation
     cache_mgr = CacheManager()
     loader = LoadData(cache_manager=cache_mgr)
-    # Uncomment to clear the cache at runtime:
-    # cache_mgr.clear_cache()
-
     loader.load_data()
+    filter = FilterData()
 
-    filterer = FilterData()
+    # Executable code
     try:
-        muslim_countries = filterer.countriesMuslims(loader.population_census_df)
+        muslim_countries = filter.countriesMuslims(loader.population_census_df)
+        print(muslim_countries)
+        aviation_codes = filter.print_aviation_head(loader.aviation_data, 2019)
+
+        # Transform the rank 2 array into a rank 1 array
+        if aviation_codes is not None:
+            country_codes = aviation_codes.apply(
+                lambda airport: airport_data.get_airport_by_iata(airport)[0]["country_code"]
+                if isinstance(airport, str) and len(airport) == 3 and airport.isalpha() and airport_data.get_airport_by_iata(airport)
+                else None
+            )
+            country_codes = country_codes.dropna()
+            print(country_codes.values)
+            print(len(country_codes.values))
+        
+
+    
 
     except Exception as e:
-        raise RuntimeError(str(e))
-
-    """
-    “muslim-population-by-country-20.xlsl”
-    Column flagCode
-    With
-    “countries.xlsx”
-    Column alpha_2 
-    """
-    loader.countries_df.rename(columns={"name":"country_name"}, inplace=True)
-    muslim_with_countries=muslim_countries.merge(loader.countries_df, left_on="flagCode",right_on="alpha_2",how="left")
-
-    """
-    “countries.xlsx”
-    Column alpha_2 
-    With
-    “countries.xlsx”
-    Column alpha_3
-    """
-    muslim_with_countries=muslim_with_countries[["country_name", "flagCode", "alpha_2", "alpha_3"]]
-
-    """
-    “countries.xlsx”
-    Column alpha_3
-    With
-    “monthly_passengers”
-    IS03
-    """
-    muslim_with_countries_with_flights=muslim_with_countries.merge(loader.monthly_passengers, left_on="alpha_3", right_on="IS03",how="left")
-    print(muslim_with_countries_with_flights)
+        print(aviation_codes)
+    
