@@ -414,125 +414,133 @@ class GraphData():
             return month_map.get(ms)
         return None
 
-    def plot_month_destination_heatmap(self, year: int, directory: str = "_aviation_outputs", 
-                                       normalize_by: str = "year_total", cmap: str = "viridis",
-                                       figsize=(10, 6), flag_codes=None, log_scale=False):
-        """Interactive heat map (month slider) of destination code frequencies.
-
-        Parameters
-        ----------
-        year : int
-            Year of the pre-filtered aviation CSV.
-        directory : str
-            Directory containing filtered_aviation_{year}.csv.
-        normalize_by : {'year_total','month'}
-            - 'year_total': color scale fixed using each destination's TOTAL appearances across all months
-              (so color intensity remains comparable month-to-month using the yearly max across destinations).
-            - 'month': color scale adapts to the selected month (max within that month's counts).
-        cmap : str
-            Matplotlib colormap name.
-        figsize : tuple
-            Figure size.
-        flag_codes : list[str] or None
-            If provided, only show destinations whose code is in this list.
-
-        Behavior
-        --------
-        The visualization shows a single-column heat map (DestinationCodes on Y axis, one column representing
-        the currently selected month). A slider (1..12) updates the column to show that month's counts.
-        Color normalization stays constant across months if normalize_by='year_total'.
+    def plot_year_destination_heatmap(self, start_year=2010, end_year=2019, directory="_aviation_outputs", 
+                                      normalize_by="year_total", cmap="viridis", figsize=(12, 8), flag_codes=None, log_scale=False):
         """
-        df = self._load_filtered_year(year, directory)
-        if df.empty:
-            raise ValueError("Filtered DataFrame is empty; cannot build heat map.")
+        Interactive heatmap (year slider) of destination code frequencies as a grid:
+        Rows: Destination codes
+        Columns: Months (Jan-Dec)
+        Slider: Selects year (start_year to end_year)
+        """
+        import matplotlib.pyplot as plt
+        from matplotlib.widgets import Slider
+        import matplotlib.colors as mcolors
+        import numpy as np
+        import os
+        import pandas as pd
 
-        # Filter by flag_codes if provided
-        if flag_codes is not None:
-            normalized = [c.strip().upper() for c in flag_codes if isinstance(c, str) and c.strip()]
-            df = df[df['DestinationCode'].str.upper().isin(normalized)]
-            if df.empty:
-                raise ValueError("No destinations match the provided flag codes.")
+        def load_counts(year):
+            df = self._load_filtered_year(year, directory)
+            if flag_codes is not None:
+                normalized = [c.strip().upper() for c in flag_codes if isinstance(c, str) and c.strip()]
+                df = df[df['DestinationCode'].str.upper().isin(normalized)]
+            counts = (df.groupby(["DestinationCode", "Month"]).size().unstack(fill_value=0))
+            for m in range(1, 13):
+                if m not in counts.columns:
+                    counts[m] = 0
+            counts = counts[sorted(counts.columns)]
+            return counts
 
-        # Aggregate counts per destination per month
-        counts = (df.groupby(["DestinationCode", "Month"]).size()
-                    .unstack(fill_value=0))
+        # Load all years' destination codes to get union for consistent y-axis
+        all_dest_codes = set()
+        for year in range(start_year, end_year + 1):
+            try:
+                df = self._load_filtered_year(year, directory)
+                if flag_codes is not None:
+                    normalized = [c.strip().upper() for c in flag_codes if isinstance(c, str) and c.strip()]
+                    df = df[df['DestinationCode'].str.upper().isin(normalized)]
+                all_dest_codes.update(df['DestinationCode'].unique())
+            except Exception:
+                continue
+        all_dest_codes = sorted(list(all_dest_codes))
 
-        # Ensure all months 1..12 are present as columns
-        for m in range(1, 13):
-            if m not in counts.columns:
-                counts[m] = 0
-        counts = counts[sorted(counts.columns)]
+        # Preload counts for all years
+        year_counts = {}
+        for year in range(start_year, end_year + 1):
+            try:
+                c = load_counts(year)
+                # Reindex to all_dest_codes for consistent rows
+                c = c.reindex(all_dest_codes, fill_value=0)
+                year_counts[year] = c
+            except Exception:
+                continue
 
-        dest_codes = counts.index.tolist()
-        # Precompute total counts (used for normalization or reference)
-        yearly_totals = counts.sum(axis=1)
-        global_max_year = yearly_totals.max()
-        # Fallback if somehow all zero
-        if global_max_year == 0:
-            global_max_year = 1
-
-        # Initial month to display (first with any data or 1)
-        initial_month = next((m for m in range(1, 13) if counts[m].sum() > 0), 1)
+        # Initial year
+        initial_year = start_year
+        counts = year_counts[initial_year]
 
         # Logarithmic transformation if requested
         def log_transform(arr):
-            return np.log1p(arr)  # log(1 + x) to avoid log(0)
+            return np.log1p(arr)
 
-        # Prepare figure
-        fig, ax = plt.subplots(figsize=figsize)
-        plt.subplots_adjust(left=0.25, bottom=0.25)  # leave space for slider & y labels
-
-        month_vector = counts[initial_month].values[:, None]  # shape (n_destinations, 1)
-        if log_scale:
-            month_vector = log_transform(month_vector)
-
+        # Color normalization
         if log_scale:
             norm = mcolors.Normalize(vmin=0)
         else:
             norm = mcolors.Normalize(vmin=0)
 
-        img = ax.imshow(month_vector, aspect='auto', cmap=cmap, norm=norm)
-        ax.set_title(f"Destination Code Frequency - {year} (Month {initial_month})")
-        ax.set_xlabel("Selected Month")
-        ax.set_xticks([0])
-        ax.set_xticklabels([initial_month])
-        ax.set_yticks(range(len(dest_codes)))
-        ax.set_yticklabels(dest_codes)
+        # Prepare figure
+        fig, ax = plt.subplots(figsize=figsize)
+        plt.subplots_adjust(left=0.25, bottom=0.25)
+
+        data = counts.values
+        if log_scale:
+            data = log_transform(data)
+
+        img = ax.imshow(data, aspect='auto', cmap=cmap, norm=norm)
+        ax.set_title(f"Destination Code Frequency - {initial_year}")
+        ax.set_xlabel("Month")
+        ax.set_xticks(range(12))
+        ax.set_xticklabels(["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"])
+        ax.set_yticks(range(len(all_dest_codes)))
+        ax.set_yticklabels(all_dest_codes)
 
         cbar = fig.colorbar(img, ax=ax, orientation='vertical', shrink=0.8)
         cbar.set_label('Log Occurrences' if log_scale else 'Occurrences')
 
-        # Slider for month selection
-        slider_ax = fig.add_axes([0.25, 0.1, 0.5, 0.03])  # [left, bottom, width, height]
-        month_slider = Slider(ax=slider_ax, label='Month', valmin=1, valmax=12, valinit=initial_month, valstep=1)
+        # Slider for year selection
+        slider_ax = fig.add_axes([0.25, 0.1, 0.5, 0.03])
+        year_slider = Slider(ax=slider_ax, label='Year', valmin=start_year, valmax=end_year, valinit=initial_year, valstep=1)
+
+        # Helper: get Hajj month for each year
+        hajj_months = {}
+        for year in range(start_year, end_year + 1):
+            try:
+                hajj_start, _ = next_hajj(year)
+                hajj_months[year] = hajj_start.month
+            except Exception:
+                continue
+
+        # Draw initial jitter line for Hajj month
+        def draw_hajj_jitter(ax, hajj_month):
+            # Place a vertical line at the month index (0-based)
+            ax.axvline(x=hajj_month-1, color='red', linestyle='--', linewidth=2, alpha=0.7, label='Hajj Month')
+
+        # Initial year
+        draw_hajj_jitter(ax, hajj_months.get(initial_year, None))
 
         def update(val):
-            m = int(month_slider.val)
-            new_vec = counts[m].values[:, None]
+            y = int(year_slider.val)
+            new_data = year_counts[y].values
             if log_scale:
-                new_vec = log_transform(new_vec)
-            img.set_data(new_vec)
-            ax.set_title(f"Destination Code Frequency - {year} (Month {m})")
-            ax.set_xticklabels([m])
-            if normalize_by == 'month':
-                vmax_local = max(1, new_vec.max())
-                img.set_norm(mcolors.Normalize(vmin=0, vmax=vmax_local))
-                cbar.update_normal(img)
-            # If 'year_total', norm fixed; no change needed
+                new_data = log_transform(new_data)
+            img.set_data(new_data)
+            ax.set_title(f"Destination Code Frequency - {y}")
+            # Remove previous hajj lines
+            for l in ax.lines:
+                l.remove()
+            # Draw new hajj line
+            hajj_month = hajj_months.get(y, None)
+            if hajj_month:
+                draw_hajj_jitter(ax, hajj_month)
             fig.canvas.draw_idle()
 
-        month_slider.on_changed(update)
+        year_slider.on_changed(update)
 
-        # Helpful annotation: show how color is determined
-        norm_desc = (
-            ("Log color scale fixed by yearly totals (max occurrences across all months)." if log_scale else "Color scale fixed by yearly totals (max occurrences across all months).")
-            if normalize_by == 'year_total' else
-            ("Log color scale adjusts to selected month (local monthly max)." if log_scale else "Color scale adjusts to selected month (local monthly max).")
-        )
-        ax.text(1.05, 1.02, norm_desc, transform=ax.transAxes, fontsize=9, va='bottom', wrap=True)
+        ax.text(1.05, 1.02, "Grid: Destinations x Months. Slider: Year. Red dashed line = Hajj month.", transform=ax.transAxes, fontsize=9, va='bottom', wrap=True)
 
         plt.show()
-        return fig, month_slider
+        return fig, year_slider
 
 
 # -----------------------
@@ -550,6 +558,6 @@ if __name__ == "__main__":
         #f.process_years(loader.aviation_data, years=range(2010, 2020))
         plotter = GraphData()
         flag_codes = ['EG', 'TR', 'IR', 'PK', 'ID', 'BD', 'IN', 'MY', 'NG', 'DZ', 'MA', 'IQ', 'AF', 'YE', 'SY']
-        plotter.plot_month_destination_heatmap(year=2010, normalize_by='year_total', cmap='plasma', flag_codes=flag_codes)
+        plotter.plot_year_destination_heatmap(start_year=2010, end_year=2019, normalize_by='year_total', cmap='plasma', flag_codes=flag_codes)
     except Exception as exc:
         print(f"Error during aviation processing: {exc}")

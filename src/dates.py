@@ -20,3 +20,6 @@ def next_hajj(year):
 
     except:
         return f"Dios nos ampare, no encontramos {year} :("
+    
+for i in range(2010,2020):
+    next_hajj(i)
