@@ -15,54 +15,47 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 
 class LoadData():
+
     def __init__(self):
-        pass
-
-    def load_data(self):
-        # Load countries data
-        self.countries_df = pd.read_csv(countries)
-        print("Countries Data Loaded:")
-
-        # Load global holidays data
-        self.holidays_df = pd.read_csv(global_holidays)
-        print("Global Holidays Data Loaded:")
-
-        # Load aviation data for each year in parallel
-        aviation_paths = {}
-        for i in range(2010, 2020):
-            raw_path = globals()[f'aviation_{i}']
-            aviation_paths[i] = os.path.normpath(raw_path)
-
-        pilgrimage = {
-            'pilgrimage1': pilgrimage_2010,
-            'pilgrimage2': pilgrimage_2016,
-            'pilgrimage3': pilgrimage_2018,
-            'pilgrimage4': pilgrimage_2019
-        }
-        for key, path in pilgrimage.items():
-            pilgrimage[key] = os.path.normpath(path)
-
-        def load_excel(year, path):
-            df = pd.read_excel(path)
-            print(f"Data {year} Loaded: shape={df.shape}")
-            return year, df
-
+        self.countries_df = None
+        self.holidays_df = None
         self.aviation_data = {}
         self.pilgrimage_data = {}
 
-        # Load pilgrimage data in parallel
+    def _load_csv(self, path, name=None):
+        df = pd.read_csv(path)
+        if name:
+            print(f"{name} Data Loaded: shape={df.shape}")
+        return df
+
+    def _load_excels_parallel(self, data_dict, print_prefix):
+        def load_excel(key, path):
+            df = pd.read_excel(path)
+            print(f"{print_prefix} {key} Loaded: shape={df.shape}")
+            return key, df
+        results = {}
         with ThreadPoolExecutor() as executor:
-            pilgrimage_futures = [executor.submit(load_excel, year, path) for year, path in pilgrimage.items()]
-            for future in as_completed(pilgrimage_futures):
-                year, df = future.result()
-                self.pilgrimage_data[year] = df
-                
-        # Load aviation data in parallel
-        with ThreadPoolExecutor() as executor:
-            aviation_futures = [executor.submit(load_excel, year, path) for year, path in aviation_paths.items()]
-            for future in as_completed(aviation_futures):
-                year, df = future.result()
-                self.aviation_data[year] = df
+            futures = [executor.submit(load_excel, key, path) for key, path in data_dict.items()]
+            for future in as_completed(futures):
+                key, df = future.result()
+                results[key] = df
+        return results
+
+
+    def load_data(self):
+        self.countries_df = self._load_csv(countries, name="Countries")
+        self.holidays_df = self._load_csv(global_holidays, name="Global Holidays")
+
+        aviation_paths = {i: os.path.normpath(globals()[f'aviation_{i}']) for i in range(2010, 2020)}
+        pilgrimage = {
+            'pilgrimage1': os.path.normpath(pilgrimage_2010),
+            'pilgrimage2': os.path.normpath(pilgrimage_2016),
+            'pilgrimage3': os.path.normpath(pilgrimage_2018),
+            'pilgrimage4': os.path.normpath(pilgrimage_2019)
+        }
+
+        self.aviation_data = self._load_excels_parallel(aviation_paths, print_prefix="Aviation Data")
+        self.pilgrimage_data = self._load_excels_parallel(pilgrimage, print_prefix="Pilgrimage Data")
 
 
 if __name__ == "__main__":
