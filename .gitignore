@@ -1,6 +1,0 @@
-.env
-.vscode/
-__pycache__/
-__cache__/
-_filtered_aviation_output.csv
-_aviation_outputs/
