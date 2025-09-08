@@ -26,6 +26,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.widgets import Slider
 from matplotlib import colors as mcolors
+import matplotlib.pyplot as plt
 
 # -----------------------
 # Configuration
@@ -422,13 +423,6 @@ class GraphData():
         Columns: Months (Jan-Dec)
         Slider: Selects year (start_year to end_year)
         """
-        import matplotlib.pyplot as plt
-        from matplotlib.widgets import Slider
-        import matplotlib.colors as mcolors
-        import numpy as np
-        import os
-        import pandas as pd
-
         def load_counts(year):
             df = self._load_filtered_year(year, directory)
             if flag_codes is not None:

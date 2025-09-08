@@ -40,4 +40,4 @@ class tabla():
 
 
 NL_2010=tabla("NL",2010)
-EG_2016=tabla("EG",2016)
+#EG_2016=tabla("EG",2016)
